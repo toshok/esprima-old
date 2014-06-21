@@ -223,7 +223,6 @@ parseYieldExpression: true
         StrictParamDupe: 'Strict mode function may not have duplicate parameter names',
         ParameterAfterRestParameter: 'Rest parameter must be final parameter of an argument list',
         DefaultRestParameter: 'Rest parameter can not have a default value',
-        ElementAfterSpreadElement: 'Spread must be the final element of an element list',
         ObjectPatternAsRestParameter: 'Invalid rest parameter',
         ObjectPatternAsSpread: 'Invalid spread argument',
         StrictFunctionName:  'Function name may not be eval or arguments in strict mode',
@@ -2279,9 +2278,6 @@ parseYieldExpression: true
                 tmp = parseSpreadOrAssignmentExpression();
                 elements.push(tmp);
                 if (tmp && tmp.type === Syntax.SpreadElement) {
-                    if (!match(']')) {
-                        throwError({}, Messages.ElementAfterSpreadElement);
-                    }
                 } else if (!(match(']') || matchKeyword('for') || matchKeyword('if'))) {
                     expect(','); // this lexes.
                     possiblecomprehension = false;
@@ -2641,9 +2637,7 @@ parseYieldExpression: true
 
                 if (match(')')) {
                     break;
-                } else if (arg.type === Syntax.SpreadElement) {
-                    throwError({}, Messages.ElementAfterSpreadElement);
-                }
+		}
 
                 expect(',');
             }
@@ -3215,9 +3209,6 @@ parseYieldExpression: true
 
                 if (expr.type === Syntax.SpreadElement) {
                     spreadFound = true;
-                    if (!match(')')) {
-                        throwError({}, Messages.ElementAfterSpreadElement);
-                    }
                     break;
                 }
             }
