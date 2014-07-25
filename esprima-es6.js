@@ -1992,28 +1992,29 @@ parseYieldExpression: true
             };
         },
 
-        createExportDeclaration: function (declaration, specifiers, source) {
+        createExportDeclaration: function (def, declaration, specifiers, source) {
             return {
                 type: Syntax.ExportDeclaration,
                 declaration: declaration,
+		default: def,
                 specifiers: specifiers,
                 source: source
             };
         },
 
-        createImportSpecifier: function (id, name) {
+        createImportSpecifier: function (kind, id, name) {
             return {
                 type: Syntax.ImportSpecifier,
+		kind: kind,
                 id: id,
                 name: name
             };
         },
 
-        createImportDeclaration: function (specifiers, kind, source) {
+        createImportDeclaration: function (specifiers, source) {
             return {
                 type: Syntax.ImportDeclaration,
                 specifiers: specifiers,
-                kind: kind,
                 source: source
             };
         },
@@ -3410,10 +3411,36 @@ parseYieldExpression: true
     }
 
     function parseExportDeclaration() {
-        var previousAllowKeyword, decl, def, src, specifiers,
+        var previousAllowDefault, decl, def, src, specifiers,
             marker = markerCreate();
 
         expectKeyword('export');
+
+        if (matchKeyword('default')) {
+            lex();
+            if (match('=')) {
+                lex();
+                def = parseAssignmentExpression();
+            } else if (lookahead.type === Token.Keyword) {
+                switch (lookahead.value) {
+                case 'let':
+                case 'const':
+                case 'var':
+                case 'class':
+                    def = parseSourceElement();
+                    break;
+                case 'function':
+                    def = parseFunctionExpression();
+                    break;
+                default:
+                    throwUnexpected(lex());
+                }
+            } else {
+                def = parseAssignmentExpression();
+            }
+            consumeSemicolon();
+            return markerApply(marker, delegate.createExportDeclaration(true, def, null, null));
+        }
 
         if (lookahead.type === Token.Keyword) {
             switch (lookahead.value) {
@@ -3422,16 +3449,12 @@ parseYieldExpression: true
             case 'var':
             case 'class':
             case 'function':
-                return markerApply(marker, delegate.createExportDeclaration(parseSourceElement(), null, null));
+                previousAllowDefault = state.allowDefault;
+                state.allowDefault = true;
+                decl = markerApply(marker, delegate.createExportDeclaration(false, parseSourceElement(), null, null));
+                state.allowDefault = previousAllowDefault;
+                return decl;
             }
-        }
-
-        if (isIdentifierName(lookahead)) {
-            previousAllowKeyword = state.allowKeyword;
-            state.allowKeyword = true;
-            decl = parseVariableDeclarationList('let');
-            state.allowKeyword = previousAllowKeyword;
-            return markerApply(marker, delegate.createExportDeclaration(decl, null, null));
         }
 
         specifiers = [];
@@ -3457,7 +3480,7 @@ parseYieldExpression: true
 
         consumeSemicolon();
 
-        return markerApply(marker, delegate.createExportDeclaration(null, specifiers, src));
+        return markerApply(marker, delegate.createExportDeclaration(false, null, specifiers, src));
     }
 
     function parseImportDeclaration() {
