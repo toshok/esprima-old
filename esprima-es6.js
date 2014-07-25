@@ -3461,32 +3461,34 @@ parseYieldExpression: true
     }
 
     function parseImportDeclaration() {
-        var specifiers, kind, src, marker = markerCreate();
+        var specifiers, src, marker = markerCreate();
 
         expectKeyword('import');
         specifiers = [];
 
-        if (isIdentifierName(lookahead)) {
-            kind = 'default';
-            specifiers.push(parseImportSpecifier());
-
-            if (!matchContextualKeyword('from')) {
-                throwError({}, Messages.NoFromAfterImport);
-            }
-            lex();
-        } else if (match('{')) {
-            kind = 'named';
-            lex();
+        if (lookahead.type !== Token.StringLiteral) {
             do {
-                specifiers.push(parseImportSpecifier());
+		if (isIdentifierName(lookahead)) {
+                    specifiers.push(parseImportSpecifier('default'));
+		}
+		else if (match('*')) {
+                    lex();
+                    specifiers.push(parseBatchImportSpecifier());
+		}
+		else if (match('{')) {
+                    lex();
+                    do {
+			specifiers.push(parseImportSpecifier('named'));
+                    } while (match(',') && lex());
+                    expect('}');
+		}
             } while (match(',') && lex());
-            expect('}');
 
             if (!matchContextualKeyword('from')) {
-                throwError({}, Messages.NoFromAfterImport);
+		throwError({}, Messages.NoFromAfterImport);
             }
             lex();
-        }
+	}
 
         src = parsePrimaryExpression();
         if (src.type !== Syntax.Literal) {
@@ -3495,10 +3497,10 @@ parseYieldExpression: true
 
         consumeSemicolon();
 
-        return markerApply(marker, delegate.createImportDeclaration(specifiers, kind, src));
+        return markerApply(marker, delegate.createImportDeclaration(specifiers, src));
     }
 
-    function parseImportSpecifier() {
+    function parseImportSpecifier(kind) {
         var id, name = null, marker = markerCreate();
 
         id = parseNonComputedProperty();
@@ -3507,7 +3509,19 @@ parseYieldExpression: true
             name = parseVariableIdentifier();
         }
 
-        return markerApply(marker, delegate.createImportSpecifier(id, name));
+        return markerApply(marker, delegate.createImportSpecifier(kind, id, name));
+    }
+
+    function parseBatchImportSpecifier() {
+        var name = null, marker = markerCreate();
+
+        if (!matchContextualKeyword('as'))
+            throwError({}, Messages.NoAsWithBatchImport);
+
+        lex();
+        name = parseVariableIdentifier();
+
+        return markerApply(marker, delegate.createImportSpecifier('batch', null, name));
     }
 
     // 12.3 Empty Statement

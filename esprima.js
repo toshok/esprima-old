@@ -237,6 +237,7 @@ parseYieldExpression: true
         StrictReservedWord:  'Use of future reserved word in strict mode',
         NewlineAfterModule:  'Illegal newline after module',
         NoFromAfterImport: 'Missing from after import',
+        NoAsWithBatchImport: 'Missing as after batch import specifier',
         InvalidModuleSpecifier: 'Invalid module specifier',
         NestedModule: 'Module declaration can not be nested',
         NoUnintializedConst: 'Const must be initialized',
@@ -1992,28 +1993,29 @@ parseYieldExpression: true
             };
         },
 
-        createExportDeclaration: function (declaration, specifiers, source) {
+        createExportDeclaration: function (def, declaration, specifiers, source) {
             return {
                 type: Syntax.ExportDeclaration,
                 declaration: declaration,
+		default: def,
                 specifiers: specifiers,
                 source: source
             };
         },
 
-        createImportSpecifier: function (id, name) {
+        createImportSpecifier: function (kind, id, name) {
             return {
                 type: Syntax.ImportSpecifier,
+		kind: kind,
                 id: id,
                 name: name
             };
         },
 
-        createImportDeclaration: function (specifiers, kind, source) {
+        createImportDeclaration: function (specifiers, source) {
             return {
                 type: Syntax.ImportDeclaration,
                 specifiers: specifiers,
-                kind: kind,
                 source: source
             };
         },
@@ -3291,7 +3293,11 @@ parseYieldExpression: true
             id = parseArrayInitialiser();
             reinterpretAsAssignmentBindingPattern(id);
         } else {
-            id = state.allowKeyword ? parseNonComputedProperty() : parseVariableIdentifier();
+            if (state.allowDefault) {
+                id = matchKeyword('default') ? parseNonComputedProperty() : parseVariableIdentifier();
+            } else {
+                id = parseVariableIdentifier();
+            }
             // 12.2.1
             if (strict && isRestrictedWord(id.name)) {
                 throwErrorTolerant({}, Messages.StrictVarName);
@@ -3410,10 +3416,36 @@ parseYieldExpression: true
     }
 
     function parseExportDeclaration() {
-        var previousAllowKeyword, decl, def, src, specifiers,
+        var previousAllowDefault, decl, def, src, specifiers,
             marker = markerCreate();
 
         expectKeyword('export');
+
+        if (matchKeyword('default')) {
+            lex();
+            if (match('=')) {
+                lex();
+                def = parseAssignmentExpression();
+            } else if (lookahead.type === Token.Keyword) {
+                switch (lookahead.value) {
+                case 'let':
+                case 'const':
+                case 'var':
+                case 'class':
+                    def = parseSourceElement();
+                    break;
+                case 'function':
+                    def = parseFunctionExpression();
+                    break;
+                default:
+                    throwUnexpected(lex());
+                }
+            } else {
+                def = parseAssignmentExpression();
+            }
+            consumeSemicolon();
+            return markerApply(marker, delegate.createExportDeclaration(true, def, null, null));
+        }
 
         if (lookahead.type === Token.Keyword) {
             switch (lookahead.value) {
@@ -3422,16 +3454,12 @@ parseYieldExpression: true
             case 'var':
             case 'class':
             case 'function':
-                return markerApply(marker, delegate.createExportDeclaration(parseSourceElement(), null, null));
+                previousAllowDefault = state.allowDefault;
+                state.allowDefault = true;
+                decl = markerApply(marker, delegate.createExportDeclaration(false, parseSourceElement(), null, null));
+                state.allowDefault = previousAllowDefault;
+                return decl;
             }
-        }
-
-        if (isIdentifierName(lookahead)) {
-            previousAllowKeyword = state.allowKeyword;
-            state.allowKeyword = true;
-            decl = parseVariableDeclarationList('let');
-            state.allowKeyword = previousAllowKeyword;
-            return markerApply(marker, delegate.createExportDeclaration(decl, null, null));
         }
 
         specifiers = [];
@@ -3457,30 +3485,32 @@ parseYieldExpression: true
 
         consumeSemicolon();
 
-        return markerApply(marker, delegate.createExportDeclaration(null, specifiers, src));
+        return markerApply(marker, delegate.createExportDeclaration(false, null, specifiers, src));
     }
 
     function parseImportDeclaration() {
-        var specifiers, kind, src, marker = markerCreate();
+        var specifiers, src, marker = markerCreate();
 
         expectKeyword('import');
         specifiers = [];
 
-        if (isIdentifierName(lookahead)) {
-            kind = 'default';
-            specifiers.push(parseImportSpecifier());
-
-            if (!matchContextualKeyword('from')) {
-                throwError({}, Messages.NoFromAfterImport);
-            }
-            lex();
-        } else if (match('{')) {
-            kind = 'named';
-            lex();
+        if (lookahead.type !== Token.StringLiteral) {
             do {
-                specifiers.push(parseImportSpecifier());
+                if (isIdentifierName(lookahead)) {
+                    specifiers.push(parseImportSpecifier('default'));
+                }
+                else if (match('*')) {
+                    lex();
+                    specifiers.push(parseBatchImportSpecifier());
+                }
+                else if (match('{')) {
+                    lex();
+                    do {
+                        specifiers.push(parseImportSpecifier('named'));
+                    } while (match(',') && lex());
+                    expect('}');
+                }
             } while (match(',') && lex());
-            expect('}');
 
             if (!matchContextualKeyword('from')) {
                 throwError({}, Messages.NoFromAfterImport);
@@ -3495,10 +3525,10 @@ parseYieldExpression: true
 
         consumeSemicolon();
 
-        return markerApply(marker, delegate.createImportDeclaration(specifiers, kind, src));
+        return markerApply(marker, delegate.createImportDeclaration(specifiers, src));
     }
 
-    function parseImportSpecifier() {
+    function parseImportSpecifier(kind) {
         var id, name = null, marker = markerCreate();
 
         id = parseNonComputedProperty();
@@ -3507,7 +3537,19 @@ parseYieldExpression: true
             name = parseVariableIdentifier();
         }
 
-        return markerApply(marker, delegate.createImportSpecifier(id, name));
+        return markerApply(marker, delegate.createImportSpecifier(kind, id, name));
+    }
+
+    function parseBatchImportSpecifier() {
+        var name = null, marker = markerCreate();
+
+        if (!matchContextualKeyword('as'))
+            throwError({}, Messages.NoAsWithBatchImport);
+
+        lex();
+        name = parseVariableIdentifier();
+
+        return markerApply(marker, delegate.createImportSpecifier('batch', null, name));
     }
 
     // 12.3 Empty Statement
