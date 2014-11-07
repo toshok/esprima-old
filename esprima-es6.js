@@ -45,25 +45,9 @@ parseStatement: true, parseSourceElement: true, parseModuleBlock: true, parseCon
 parseYieldExpression: true
 */
 
-(function (root, factory) {
-    'use strict';
-
-    // Universal Module Definition (UMD) to support AMD, CommonJS/Node.js,
-    // Rhino, and plain browser loading.
-    if (typeof define === 'function' && define.amd) {
-        define(['exports'], factory);
-    } else if (typeof exports !== 'undefined') {
-        factory(exports);
-    } else {
-        factory((root.esprima = {}));
-    }
-}(this, function (exports) {
-    'use strict';
-
     var Token,
         TokenName,
         FnExprTokens,
-        Syntax,
         PropertyKind,
         Messages,
         Regex,
@@ -115,7 +99,7 @@ parseYieldExpression: true
                     '|', '^', '!', '~', '&&', '||', '?', ':', '===', '==', '>=',
                     '<=', '<', '>', '!=', '!=='];
 
-    Syntax = {
+    export let Syntax = {
         ArrayExpression: 'ArrayExpression',
         ArrayPattern: 'ArrayPattern',
         ArrowFunctionExpression: 'ArrowFunctionExpression',
@@ -5036,7 +5020,7 @@ parseYieldExpression: true
         return result;
     }
 
-    function tokenize(code, options) {
+    export function tokenize(code, options) {
         var toString,
             token,
             tokens;
@@ -5139,7 +5123,7 @@ parseYieldExpression: true
         return tokens;
     }
 
-    function parse(code, options) {
+    export function parse(code, options) {
         var program, toString;
 
         toString = String;
@@ -5226,36 +5210,6 @@ parseYieldExpression: true
     }
 
     // Sync with *.json manifests.
-    exports.version = '1.1.0-dev-harmony';
-
-    exports.tokenize = tokenize;
-
-    exports.parse = parse;
-
-    // Deep copy.
-    exports.Syntax = (function () {
-        var name, types = {};
-
-        if (typeof Object.create === 'function') {
-            types = Object.create(null);
-        }
-
-        for (name in Syntax) {
-            if (Syntax.hasOwnProperty(name)) {
-                types[name] = Syntax[name];
-            }
-        }
-
-        if (typeof Object.freeze === 'function') {
-            Object.freeze(types);
-        }
-
-        return types;
-    }());
-
-}));
-
-export let parse = exports.parse;
-export let Syntax = exports.Syntax;
+export let version = '1.1.0-dev-harmony';
 
 /* vim: set sw=4 ts=4 et tw=80 : */
